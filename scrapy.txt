@@ -1,0 +1,47 @@
+Usage:
+  scrapy <command> [options] [args]
+
+Available commands:
+  bench         Run quick benchmark test
+  check         Check spider contracts
+  crawl         Run a spider
+  deploy        Deploy project in Scrapyd target
+  edit          Edit spider
+  fetch         Fetch a URL using the Scrapy downloader
+  genspider     Generate new spider using pre-defined templates
+  list          List available spiders
+  parse         Parse URL (using its spider) and print the results
+  runspider     Run a self-contained spider (without creating a project)
+  settings      Get settings values
+  shell         Interactive scraping console
+  startproject  Create new project
+  version       Print Scrapy version
+  view          Open URL in browser, as seen by Scrapy
+
+Use "scrapy <command> -h" to see more info about a command
+
+Use "scrapy <command> -h" to see more info about a command
+
+
+fetch:
+  使用scrapy的downloader下载url内容
+
+view:
+  打开浏览器，显示scrapy看见的内容
+
+crawl:
+  运行一个爬虫
+  Options
+  =======
+  --help, -h              show this help message and exit
+  -a NAME=VALUE           set spider argument (may be repeated)
+  --output=FILE, -o FILE  dump scraped items into FILE (use - for stdout)
+  --output-format=FORMAT, -t FORMAT
+                          format to use for dumping items with -o (default:
+                          jsonlines)
+
+命令行的详细介绍：
+http://scrapy-chs.readthedocs.org/zh_CN/latest/topics/commands.html
+
+--------------------------------------------------spider-----------------------------------------
+  针对downloader下载的内容进行处理，根据功能侧重点，分为以下几类：
