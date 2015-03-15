@@ -43,5 +43,387 @@ crawl:
 命令行的详细介绍：
 http://scrapy-chs.readthedocs.org/zh_CN/latest/topics/commands.html
 
---------------------------------------------------spider-----------------------------------------
-  针对downloader下载的内容进行处理，根据功能侧重点，分为以下几类：
+// ============================================================================================
+// 入门例子
+// ============================================================================================
+1. 定义想抓取的数据
+    在scrapy中，通过scrapy item完成，如：
+    import scrapy
+    class TorrentItem(scrapy.Item):
+      url = scrapy.Field()
+      name = scrapy.Field()
+      description = scrapy.Field()
+      size = scrapy.Field()
+
+2. 编写提取数据的spider
+    其定义了初始URL，针对后续链接的规则以及从页面中提取数据的规则，如
+    from scrapy.contrib.spiders import CrawlSpider, Rule
+    from scrapy.contrib.linkextractors import LinkExtractor
+
+    class MininovaSpider(CrawlSpider):
+
+      name = 'mininova'
+      allowed_domains = ['mininova.org']
+      start_urls = ['http://www.mininova.org/today']
+      rules = [Rule(LinkExtractor(allow=['/tor/\d+']), 'parse_torrent')]
+
+      def parse_torrent(self, response):
+          torrent = TorrentItem()
+          torrent['url'] = response.url
+          torrent['name'] = response.xpath("//h1/text()").extract()
+          torrent['description'] = response.xpath("//div[@id='description']").extract()
+          torrent['size'] = response.xpath("//div[@id='info-left']/p[2]/text()[2]").extract()
+          return torrent
+3. 执行spider，获取数据
+    scrapy crawl mininova -o scraped_data.json
+    命令中使用了feed导出数据，并保存为json格式。
+    同时，也可以使用item管道将item存储到数据库中。
+
+// ============================================================================================
+// 完整项目
+// ============================================================================================
+1. 创建项目
+    scrapy startproject proj_name
+    将会创建：
+      tutorial/
+        scrapy.cfg
+        tutorial/
+          __init__.py
+          items.py
+          pipelines.py
+          settings.py
+          spiders/
+              __init__.py
+              ...
+    scrapy.cfg: 项目的配置文件
+    tutorial/: 该项目的python模块。之后您将在此加入代码。
+    tutorial/items.py: 项目中的item文件.
+    tutorial/pipelines.py: 项目中的pipelines文件.
+    tutorial/settings.py: 项目的设置文件.
+    tutorial/spiders/: 放置spider代码的目录.
+
+2. 定义item
+    是保存爬去到的数据的容器，使用方法和字典类似
+    import scrapy
+
+    class DmozItem(scrapy.Item):
+        title = scrapy.Field()
+        link = scrapy.Field()
+        desc = scrapy.Field()
+
+3. 编写爬虫spider
+    必须继承scrapy.Spider类。并定义以下三个属性：
+      name：用于区别spider，必须唯一
+      start_urls：启动时爬去的url列表，因此第一个被获取到的页面将是其中之一，后续的url则从火毒的数据中提取
+      parse：是spider的一个方法，被调用时，没个url下载完成后生成的response对象将会作为唯一的参数传递给该函数，该函数负责对数据进行解析，及生成进一步处理的url对象
+      import scrapy
+
+      class DmozSpider(scrapy.spider.Spider):
+          name = "dmoz"
+          allowed_domains = ["dmoz.org"]
+          start_urls = [
+              "http://www.dmoz.org/Computers/Programming/Languages/Python/Books/",
+              "http://www.dmoz.org/Computers/Programming/Languages/Python/Resources/"
+          ]
+
+          def parse(self, response):
+              filename = response.url.split("/")[-2]
+              with open(filename, 'wb') as f:
+                  f.write(response.body)
+
+4. 爬取
+    scrapy crawl dmoz(spider_name)
+
+// ============================================================================================
+// Item
+// ============================================================================================
+
+1. Items
+    爬去的主要目标就是从非结构性的数据源提取结构性数据，scrapy提供Item类来满足这样的需求
+    Item对象是种简单的容器，保存了爬取到的数据，提供了dict类似的API以及用于声明可用字段的简单语法
+
+2. 声明Item
+    import scrapy
+
+    class Product(scrapy.Item):
+        name = scrapy.Field()
+        price = scrapy.Field()
+        stock = scrapy.Field()
+        last_updated = scrapy.Field(serializer=str)
+
+3. Item字段（Item Fields）
+    field对象指明了每个字段的元数据，field对象接受的值没有任何限制。item使用方法和dict类似，比如
+    >>> product = Product(name='Desktop PC', price=1000)
+    >>> print product
+    Product(name='Desktop PC', price=1000)
+    >>> product['name']
+    Desktop PC
+    >>> product['last_updated'] = 'today'
+    >>> product['last_updated']
+    today
+    >>> dict(product) # create a dict from all populated values，根据item创建字典
+    {'price': 1000, 'name': 'Desktop PC'}
+    >>> Product({'name': 'Laptop PC', 'price': 1500})   # 根据字典创建item
+    Product(price=1500, name='Laptop PC')
+
+
+// ============================================================================================
+// Spider
+// ============================================================================================
+  spider可以接受参数来修改其功能。参数一般用来定义初始URL或者指定限制爬取网站的部分。
+    运行crawl时添加-a可以传递spider参数：
+      scrapy crawl spider_name -a category=electronics
+    在构造器中获取参数：
+      import scrapy
+
+      class MySpider(Spider):
+          name = 'myspider'
+
+          def __init__(self, category=None, *args, **kwargs):
+              super(MySpider, self).__init__(*args, **kwargs)
+              self.start_urls = ['http://www.example.com/categories/%s' % category]
+              # ...
+
+  scrapy提供了多种类型的spider，用户也可以基于它们定制spider
+
+1. Spider
+  是最简单的spider，每个其他的spider必须继承自该类（包括scrapy自带的以及用户自己编写的）。spider并没有提供什么特殊的功能，仅仅请求给定的start_urls/start_requests，并根据返回的结果resulting responses调用spider的parse方法。
+
+  name：名字，定义了scrapy如何定位spider，必须是唯一的。
+  allowed_domains：可选，包含了spider允许爬取的域名列表。当offsitemiddleware启用时，域名不在列表中的url不会被跟进。
+
+  start_urls：url列表，没有指定特定的url时，spider将从该列表中开始进行爬取。
+
+  custom_settings：A dictionary of settings that will be overridden from the project wide configuration when running this spider. It must be defined as a class attribute since the settings are updated before instantiation.
+
+  crawler：This attribute is set by the from_crawler() class method after initializating the class, and links to the Crawler object to which this spider instance is bound.
+Crawlers encapsulate a lot of components in the project for their single entry access (such as extensions, middlewares, signals managers, etc). See Crawler API to know more about them.
+
+  settings：Configuration on which this spider is been ran. This is a Settings instance, see the Settings topic for a detailed introduction on this subject.
+
+  from_crawler：This is the class method used by Scrapy to create your spiders.
+
+You probably won’t need to override this directly, since the default implementation acts as a proxy to the __init__() method, calling it with the given arguments args and named arguments kwargs.
+
+Nonetheless, this method sets the crawler and settings attributes in the new instance, so they can be accessed later inside the spider’s code.
+
+  start_requests()，该方法返回一个可被迭代的对象，该对象包含了spider用于爬取的第一个request。
+  当spider启用并且没有指定url时，改方法被启用。当指定了url时，make_requests_from_url将被调用来创建request对象。该方法仅仅被调用一次，因此可以将其实现为生成器。
+  默认使用start_urls的url生成request
+  如果您想要修改最初爬取某个网站的request对象，可以重写该方法，如，需要在启动时以POST登录某个网站，可以写为：
+    def start_requests(self):
+        return [scrapy.FormRequest("http://www.example.com/login",
+                                   formdata={'user': 'john', 'pass': 'secret'},
+                                   callback=self.logged_in)]
+
+    def logged_in(self, response):
+        # here you would extract links to follow and return Requests for
+        # each of them, with another callback
+        pass
+
+  make_request_from_url。默认使用parse作为回调函数
+
+  parse，当response没有指定回调函数，默认有parse进行处理。
+
+  closed，spider被关闭时，该函数被调用。
+
+  例子：
+    简单的回调函数
+      import scrapy
+
+      class MySpider(scrapy.Spider):
+          name = 'example.com'
+          allowed_domains = ['example.com']
+          start_urls = [
+              'http://www.example.com/1.html',
+              'http://www.example.com/2.html',
+              'http://www.example.com/3.html',
+          ]
+
+          def parse(self, response):
+              self.log('A response from %s just arrived!' % response.url)
+    包含item上报和request生成的回调函数
+      import scrapy
+      from myproject.items import MyItem
+
+      class MySpider(scrapy.Spider):
+          name = 'example.com'
+          allowed_domains = ['example.com']
+          start_urls = [
+              'http://www.example.com/1.html',
+              'http://www.example.com/2.html',
+              'http://www.example.com/3.html',
+          ]
+
+          def parse(self, response):
+              sel = scrapy.Selector(response)
+              for h3 in response.xpath('//h3').extract():
+                  yield MyItem(title=h3)
+
+              for url in response.xpath('//a/@href').extract():
+                  yield scrapy.Request(url, callback=self.parse)
+
+2. crawlspider  ---  class scrapy.contrib.spiders.CrawlSpider
+  爬取一般网站常用的spider，定义了一些规则rule来提供跟进link的方便，除了从spider继承的属性外，实现了一个新的属性。
+    rules：一个包含一个或多个rule对象的集合list，每个rule对爬取网站的动作定义了特定表现。如何多个rule匹配了相同的链接，则根据他们在本属性中被定义的顺序，第一个会被使用。
+
+    parse_start_url(response)：当start_url请求返回时，该方法被调用，该方法分析最初的返回值并必须返回一个item对象或者一个request对象或者一个可迭代的包含二者对象。
+
+    爬取规则crawling rules
+      class scrapy.contrib.spiders.Rule(link_extractor, callback=None, cb_kwargs=None, follow=None, process_links=None, process_request=None)
+        link_extractor是一个link extractor对象，定义了如何从爬取的页面提取链接。
+        callback是一个callable或string（该spider中同名的函数将会被调用），从link_extractor中每获取到链接时将会调用该函数。被回调函数接受一个response作为其第一个参数，并返回一个包含irem以及或request对象的列表。不要用默认parse作为回调函数。
+
+        cb_kwargs包含传递给回调函数的参数的字典。
+
+        follow是一个布尔值，指定了根据该规则从response提取的链接是否需要跟进。如果callback为None，follow默认值为True，否则为false。
+
+        process_links是一个callable或string(同名函数被调用)，从link_extractor中获取的链接列表时将会调用该函数，该方法主要用于过滤。
+
+        process_request是一个callable或者string，该规则提取到每个request时都会调用该函数，该函数必须返回一个request或者None
+
+    实例：
+      import scrapy
+      from scrapy.contrib.spiders import CrawlSpider, Rule
+      from scrapy.contrib.linkextractors import LinkExtractor
+
+      class MySpider(CrawlSpider):
+          name = 'example.com'
+          allowed_domains = ['example.com']
+          start_urls  = ['http://www.example.com']
+
+          rules = (
+              # 提取匹配 'category.php' (但不匹配 'subsection.php') 的链接并跟进链接(没有callback意味着follow默认为True)
+              Rule(LinkExtractor(allow=('category\.php', ), deny=('subsection\.php', ))),
+
+              # 提取匹配 'item.php' 的链接并使用spider的parse_item方法进行分析
+              Rule(LinkExtractor(allow=('item\.php', )), callback='parse_item'),
+          )
+
+          def parse_item(self, response):
+              self.log('Hi, this is an item page! %s' % response.url)
+
+              item = scrapy.Item()
+              item['id'] = response.xpath('//td[@id="item_id"]/text()').re(r'ID: (\d+)')
+              item['name'] = response.xpath('//td[@id="item_name"]/text()').extract()
+              item['description'] = response.xpath('//td[@id="item_description"]/text()').extract()
+              return item
+
+3. XMLFeedSpider --- class scrapy.contrib.spiders.XMLFeedSpider
+  通过迭代节点的方式分析XML源，按照节点遍历
+
+4. CSVFeedSpider
+  该spider除了其按行遍历而不是节点之外其他和XMLFeedSpider十分类似，而其在每次迭代时调用的parse_row()
+
+5. SitemapSpider
+  使您爬取网站时可以通过Sitemaps来发现爬取的URL，按照指定的Sitemap，对网站进行爬取，并且支持规则。
+
+// ============================================================================================
+// selector选择器
+// ============================================================================================
+  爬取网页时，提取数据最常用的库有：BeautifulSoup或者lxml。
+  scrapy有自己的一套机制，被称为选择器selector，因为它们通过特定的Xpath或者CSS表达式来选择HTML文件的某个部分。
+
+  Scrapy选择器构建与lxml库之上，意味着他们在速度和解析准确性上非常相似。
+
+  具体用法：
+    http://scrapy-chs.readthedocs.org/zh_CN/latest/topics/selectors.html
+
+// ============================================================================================
+// Item Loaders
+// ============================================================================================
+  提供了更为便捷填充数据的方法。Item是提供保存抓取数据的容器，那么Item loader提供的是填充容器的机制。
+    from scrapy.contrib.loader import ItemLoader
+    from myproject.items import Product
+
+    def parse(self, response):
+        l = ItemLoader(item=Product(), response=response)
+        l.add_xpath('name', '//div[@class="product_name"]')
+        l.add_xpath('name', '//div[@class="product_title"]')
+        l.add_xpath('price', '//p[@id="price"]')
+        l.add_css('stock', 'p#stock]')
+        l.add_value('last_updated', 'today') # you can also use literal values
+        return l.load_item()
+  初始化一个itemloader，指明item对象以及response，然后借助各种方法，把数据填充到item的各个字段中去。
+    换言之,数据通过用 add_xpath() 的方法,把从两个不同的XPath位置提取的数据收集起来. 这是将在以后分配给 name 字段中的数据?
+
+    之后,类似的请求被用于 price 和 stock 字段 (后者使用 CSS selector 和 add_css() 方法), 最后使用不同的方法 add_value() 对 last_update 填充文本值( today ).
+
+    最终, 当所有数据被收集起来之后, 调用 ItemLoader.load_item() 方法, 实际上填充并且返回了之前通过调用 add_xpath(), add_css(), and add_value() 所提取和收集到的数据的Item.
+
+
+  实际上，有输入处理器和输出处理器在整个过程中发挥了作用，输入处理器负责将字段值输入，并存入字段内，输出处理器将存储的数据输出到item中去。可以自己定义各种输入输出处理器。
+
+  具体见：
+    http://scrapy-chs.readthedocs.org/zh_CN/latest/topics/loaders.html
+
+// ============================================================================================
+// scrapy终端
+// ============================================================================================
+  可以启动终端，进行代码调试，帮助很大
+    scrapy shell <URL>
+
+  也可以在代码中打开终端，从而进行调试，加入函数scrapy.shell.inspect_response即可
+    import scrapy
+    
+    class MySpider(scrapy.Spider):
+        name = "myspider"
+        start_urls = [
+            "http://example.com",
+            "http://example.org",
+            "http://example.net",
+        ]
+    
+        def parse(self, response):
+            # We want to inspect one specific response.
+            if ".org" in response.url:
+                from scrapy.shell import inspect_response
+                inspect_response(response, self)
+    
+            # Rest of parsing code.
+
+// ============================================================================================
+// Item Pipeline
+// ============================================================================================
+  http://scrapy-chs.readthedocs.org/zh_CN/latest/topics/item-pipeline.html
+  当item在spider中收集后，会被传递到item pipeline中，一些组件会按照顺序对齐进行处理。其主要完成：
+    清理HTML数据；验证爬取的数据（检查Item包含某些字段）；查重（并丢弃）；将爬取结果保存到数据库中。
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
