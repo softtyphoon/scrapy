@@ -365,7 +365,7 @@ Nonetheless, this method sets the crawler and settings attributes in the new ins
 
   也可以在代码中打开终端，从而进行调试，加入函数scrapy.shell.inspect_response即可
     import scrapy
-    
+
     class MySpider(scrapy.Spider):
         name = "myspider"
         start_urls = [
@@ -373,13 +373,13 @@ Nonetheless, this method sets the crawler and settings attributes in the new ins
             "http://example.org",
             "http://example.net",
         ]
-    
+
         def parse(self, response):
             # We want to inspect one specific response.
             if ".org" in response.url:
                 from scrapy.shell import inspect_response
                 inspect_response(response, self)
-    
+
             # Rest of parsing code.
 
 // ============================================================================================
@@ -388,9 +388,33 @@ Nonetheless, this method sets the crawler and settings attributes in the new ins
   http://scrapy-chs.readthedocs.org/zh_CN/latest/topics/item-pipeline.html
   当item在spider中收集后，会被传递到item pipeline中，一些组件会按照顺序对齐进行处理。其主要完成：
     清理HTML数据；验证爬取的数据（检查Item包含某些字段）；查重（并丢弃）；将爬取结果保存到数据库中。
-    
 
+  每个item pipeline就是一个类，用户可以自己实现，但是必须实现以下方法：
+    process_item(self, item, spider)
+    每个item pipeline必须实现这个方法。这个方法必须返回一个 Item (或任何继承类)对象， 或是抛出 DropItem 异常，被丢弃的item将不会被之后的pipeline组件所处理。
+    参数，item，被爬取的item；spider，爬取这个item的spider。
 
+  此外，还有方法，open_spider(self, spider); close_spider(spider), from_crawler(cls, crawler),具体作用见文档。
+
+  实例：
+    from scrapy.exceptions import DropItem
+
+    class PricePipeline(object):
+
+        vat_factor = 1.15
+
+        def process_item(self, item, spider):
+            if item['price']:
+                if item['price_excludes_vat']:
+                    item['price'] = item['price'] * self.vat_factor
+                return item
+            else:
+                raise DropItem("Missing price in %s" % item)
+  其他如，保存item到json，到数据库，查重，都能在pipeline中进行
+
+// ============================================================================================
+// Feed exports 种子输出
+// ============================================================================================
 
 
 
